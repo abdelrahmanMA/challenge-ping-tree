@@ -21,20 +21,8 @@ test.serial.cb('Adding New Target', function (t) {
   redis.FLUSHDB()
   var url = '/api/targets'
   var opts = { method: 'POST', encoding: 'json' }
-  var newTarget = {
-    id: '1',
-    url: 'http://example.com',
-    value: '0.50',
-    maxAcceptsPerDay: '10',
-    accept: {
-      geoState: {
-        $in: ['ca', 'ny']
-      },
-      hour: {
-        $in: ['13', '14', '15']
-      }
-    }
-  }
+  var newTarget = _getDummyTarget()
+
   servertest(server(), url, opts, onResponse).end(JSON.stringify(newTarget))
 
   function onResponse (err, res) {
@@ -55,24 +43,9 @@ test.serial.cb('Get All Target', function (t) {
   redis.FLUSHDB()
   var url = '/api/targets'
   var opts = { method: 'GET', encoding: 'json' }
-  var dummyTarget = {
-    id: '1',
-    url: 'http://example.com',
-    value: '0.50',
-    maxAcceptsPerDay: '10',
-    accept: {
-      geoState: {
-        $in: ['ca', 'ny']
-      },
-      hour: {
-        $in: ['13', '14', '15']
-      }
-    }
-  }
-  // Seed redis with data
-  redis.set(`target:${dummyTarget.id}`, JSON.stringify(dummyTarget))
-  redis.set('target:2', JSON.stringify(dummyTarget))
-  redis.sadd('targets', ['target:1', 'target:2'])
+  var dummyTargets = [_getDummyTarget(), _getDummyTarget({ id: 2 })]
+
+  _seedRedis(dummyTargets)
 
   servertest(server(), url, opts, onResponse)
 
@@ -83,8 +56,7 @@ test.serial.cb('Get All Target', function (t) {
     t.is(res.body.status, 'OK', 'status is ok')
     t.truthy(res.body.data)
     t.truthy(res.body.data.length === 2)
-    t.deepEqual(res.body.data[0], dummyTarget)
-    t.deepEqual(res.body.data[1], dummyTarget)
+    t.deepEqual(res.body.data, dummyTargets)
 
     t.end()
   }
@@ -94,22 +66,9 @@ test.serial.cb('Get Target By Id', function (t) {
   redis.FLUSHDB()
   var url = '/api/target/1'
   var opts = { method: 'GET', encoding: 'json' }
-  var dummyTarget = {
-    id: '1',
-    url: 'http://example.com',
-    value: '0.50',
-    maxAcceptsPerDay: '10',
-    accept: {
-      geoState: {
-        $in: ['ca', 'ny']
-      },
-      hour: {
-        $in: ['13', '14', '15']
-      }
-    }
-  }
-  // Seed redis with data
-  redis.set(`target:${dummyTarget.id}`, JSON.stringify(dummyTarget))
+  var dummyTarget = _getDummyTarget()
+
+  _seedRedis([dummyTarget])
 
   servertest(server(), url, opts, onResponse)
 
@@ -128,22 +87,9 @@ test.serial.cb('Update Target By Id', function (t) {
   redis.FLUSHDB()
   var url = '/api/target/1'
   var opts = { method: 'POST', encoding: 'json' }
-  var dummyTarget = {
-    id: '1',
-    url: 'http://example.com',
-    value: '0.50',
-    maxAcceptsPerDay: '10',
-    accept: {
-      geoState: {
-        $in: ['ca', 'ny']
-      },
-      hour: {
-        $in: ['13', '14', '15']
-      }
-    }
-  }
-  // Seed redis with data
-  redis.set(`target:${dummyTarget.id}`, JSON.stringify(dummyTarget))
+  var dummyTarget = _getDummyTarget()
+
+  _seedRedis([dummyTarget])
 
   // Update target properties
   dummyTarget.value = '1'
@@ -169,28 +115,10 @@ test.serial.cb('Target Decision', function (t) {
   redis.FLUSHDB()
   var url = '/route'
   var opts = { method: 'POST', encoding: 'json' }
-  var visitor = {
-    geoState: 'ca',
-    publisher: 'abc',
-    timestamp: '2018-07-19T13:28:59.513Z'
-  }
-  var dummyTarget = {
-    id: '1',
-    url: 'http://example.com',
-    value: '0.50',
-    maxAcceptsPerDay: '10',
-    accept: {
-      geoState: {
-        $in: ['ca', 'ny']
-      },
-      hour: {
-        $in: ['13', '14', '15']
-      }
-    }
-  }
-  // Seed redis with data
-  redis.set(`target:${dummyTarget.id}`, JSON.stringify(dummyTarget))
-  redis.sadd('targets', ['target:1'])
+  var visitor = _getDummyVisitor()
+  var dummyTarget = _getDummyTarget()
+
+  _seedRedis([dummyTarget])
 
   servertest(server(), url, opts, onResponse).end(JSON.stringify(visitor))
 
@@ -202,3 +130,37 @@ test.serial.cb('Target Decision', function (t) {
     t.end()
   }
 })
+
+function _getDummyTarget (overrides) {
+  return {
+    id: '1',
+    url: 'http://example.com',
+    value: '0.50',
+    maxAcceptsPerDay: '10',
+    accept: {
+      geoState: {
+        $in: ['ca', 'ny']
+      },
+      hour: {
+        $in: ['13', '14', '15']
+      }
+    },
+    ...overrides
+  }
+}
+
+function _getDummyVisitor (overrides) {
+  return {
+    geoState: 'ca',
+    publisher: 'abc',
+    timestamp: '2018-07-19T13:28:59.513Z',
+    ...overrides
+  }
+}
+
+function _seedRedis (targets) {
+  for (var i = 0; i < targets.length; i++) {
+    redis.set(`target:${targets[i].id}`, JSON.stringify(targets[i]))
+    redis.sadd('targets', `target:${targets[i].id}`)
+  }
+}
