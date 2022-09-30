@@ -252,6 +252,35 @@ test.serial.cb('should fail updating target by id when sending empty data',
     }
   })
 
+test.serial.cb('should fail updating target by id when geoState is invalid',
+  function (t) {
+    redis.FLUSHDB()
+    var url = '/api/target/1'
+    var opts = { method: 'POST', encoding: 'json' }
+    var dummyTarget = _getDummyTarget()
+
+    _seedRedis([dummyTarget])
+
+    // Update target properties
+    dummyTarget.accept = {
+      geoState: 'ny',
+      hour: {
+        $in: ['13', '14', '15']
+      }
+    }
+
+    servertest(server(), url, opts, onResponse).end(JSON.stringify(dummyTarget))
+
+    function onResponse (err, res) {
+      t.falsy(err, 'no error')
+
+      t.is(res.statusCode, 400, 'correct statusCode')
+      t.is(res.body.status, 'hour and geoState must be array', 'status is ok')
+
+      t.end()
+    }
+  })
+
 test.serial.cb('should fail updating target by id when target does not exist',
   function (t) {
     redis.FLUSHDB()
@@ -333,7 +362,7 @@ test.serial.cb('should reject target when different state', function (t) {
     t.falsy(err, 'no error')
 
     t.is(res.statusCode, 200, 'correct statusCode')
-    t.is(res.body.decision, 'reject', 'found target')
+    t.is(res.body.decision, 'reject', 'target rejected')
     t.end()
   }
 })
@@ -353,10 +382,31 @@ test.serial.cb('should reject target when different timestamp', function (t) {
     t.falsy(err, 'no error')
 
     t.is(res.statusCode, 200, 'correct statusCode')
-    t.is(res.body.decision, 'reject', 'found target')
+    t.is(res.body.decision, 'reject', 'target rejected')
     t.end()
   }
 })
+
+test.serial.cb('should reject target decision when no targets are left',
+  function (t) {
+    redis.FLUSHDB()
+    var url = '/route'
+    var opts = { method: 'POST', encoding: 'json' }
+    var visitor = _getDummyVisitor()
+    var dummyTarget = _getDummyTarget({ maxAcceptsPerDay: 0 })
+
+    _seedRedis([dummyTarget])
+
+    servertest(server(), url, opts, onResponse).end(JSON.stringify(visitor))
+
+    function onResponse (err, res) {
+      t.falsy(err, 'no error')
+
+      t.is(res.statusCode, 200, 'correct statusCode')
+      t.is(res.body.decision, 'reject', 'target rejected')
+      t.end()
+    }
+  })
 
 test.serial.cb('should find highest target', function (t) {
   redis.FLUSHDB()
@@ -445,6 +495,52 @@ test.serial.cb('should fail target decision when sending empty visitor',
 
       t.is(res.statusCode, 400, 'correct statusCode')
       t.is(res.body.status, 'Required field are missing', 'status is ok')
+      t.end()
+    }
+  })
+
+test.serial.cb('should fail target decision when visitor geoState is invalid',
+  function (t) {
+    redis.FLUSHDB()
+    var url = '/route'
+    var opts = { method: 'POST', encoding: 'json' }
+    var visitor = _getDummyVisitor({ geoState: 'KKK' })
+    var dummyTarget = _getDummyTarget()
+
+    _seedRedis([dummyTarget])
+
+    servertest(server(), url, opts, onResponse).end(JSON.stringify(visitor))
+
+    function onResponse (err, res) {
+      t.falsy(err, 'no error')
+
+      t.is(res.statusCode, 400, 'correct statusCode')
+      t.is(
+        res.body.status,
+        'geoState must be a string of length 2',
+        'status is ok'
+      )
+      t.end()
+    }
+  })
+
+test.serial.cb('should fail target decision when visitor timestamp is invalid',
+  function (t) {
+    redis.FLUSHDB()
+    var url = '/route'
+    var opts = { method: 'POST', encoding: 'json' }
+    var visitor = _getDummyVisitor({ timestamp: 'KKK' })
+    var dummyTarget = _getDummyTarget()
+
+    _seedRedis([dummyTarget])
+
+    servertest(server(), url, opts, onResponse).end(JSON.stringify(visitor))
+
+    function onResponse (err, res) {
+      t.falsy(err, 'no error')
+
+      t.is(res.statusCode, 400, 'correct statusCode')
+      t.is(res.body.status, 'timestamp must be of type Date', 'status is ok')
       t.end()
     }
   })
